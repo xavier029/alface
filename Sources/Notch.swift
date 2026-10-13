@@ -37,6 +37,8 @@ final class NotchModel: ObservableObject {
     static let spring = Animation.spring(response: 0.42, dampingFraction: 0.8)
 
     func show(_ p: Peek, for seconds: Double) {
+        // tela bloqueada: nada de título da música para quem está na frente do Mac
+        if locked && p == .track { return }
         withAnimation(Self.spring) { peek = p }
         peekWork?.cancel()
         let w = DispatchWorkItem { [weak self] in withAnimation(Self.spring) { self?.peek = nil } }
@@ -720,7 +722,8 @@ final class NotchController {
     func tapped() { if !model.expanded { expand() } }
 
     func expand() {
-        guard !model.expanded, !model.hidden else { return }
+        // bloqueado não expande: agenda e controles de mídia ficam só para quem desbloqueou
+        guard !model.expanded, !model.hidden, !model.locked else { return }
         haptic()
         withAnimation(NotchModel.spring) { model.expanded = true }
         Media.shared.syncPosition()
