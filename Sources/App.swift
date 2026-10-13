@@ -26,6 +26,7 @@ func selftest() {
     check("brilho", !Brightness.available || (0...1).contains(Brightness.level), "disponível=\(Brightness.available) nível=\(Brightness.level)")
     let b = Battery.read()
     check("bateria", b == nil || (0...100).contains(b!.level), b.map { "\($0.level)% carregando=\($0.charging) tomada=\($0.ac)" } ?? "sem bateria")
+    check("teclado", !KeyboardLight.available || (0...1).contains(KeyboardLight.level), "disponível=\(KeyboardLight.available) nível=\(KeyboardLight.level)")
     check("símbolo AirPods Pro", Bluetooth.symbol(for: "AirPods Pro de Gui") == "airpodspro")
     check("símbolo AirPods Max", Bluetooth.symbol(for: "AirPods Max") == "airpodsmax")
     check("símbolo genérico", Bluetooth.symbol(for: "JBL Tune") == "headphones")
@@ -50,6 +51,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     let bluetooth = Bluetooth()
     let system = SystemWatch()
     let nav = SettingsNav()
+    let volumeWatch = VolumeWatch()
+    var keyboardLevel: Float = -1
+    var keyboardChangedByUs = Date.distantPast
+    var lastKeyboardLevel: Float = 0.5
     var status: NSStatusItem!
     var settingsWindow: NSWindow?
     var axTimer: Timer?
@@ -82,12 +87,35 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
 
         if !isDemo { setupKeys() }
+
+        // HUD também quando o volume muda fora das teclas (Central de Controle, outro app)
+        let launched = Date()
+        volumeWatch.onChange = { [weak self] in
+            guard let self, Prefs.bool(K.enableVolume), Date().timeIntervalSince(launched) > 2 else { return }
+            self.notch.model.show(.volume(Volume.level, Volume.muted), for: Prefs.double(K.hudDuration))
+        }
+        volumeWatch.start()
+
+        // ponytail: brilho do teclado lido 1x/s (o CoreBrightness não tem aviso público); troque por notificação se aparecer
+        if KeyboardLight.available {
+            keyboardLevel = KeyboardLight.level
+            Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.pollKeyboard() }
+        }
         NotificationCenter.default.addObserver(forName: UserDefaults.didChangeNotification, object: nil, queue: .main) { [weak self] _ in
             self?.notch.applySettings()
             self?.notch.model.objectWillChange.send()
         }
 
         demo()
+    }
+
+    func pollKeyboard() {
+        let v = KeyboardLight.level
+        guard abs(v - keyboardLevel) > 0.004 else { return }
+        keyboardLevel = v
+        // mudança feita pelas nossas teclas já mostrou o HUD
+        guard Prefs.bool(K.enableKeyboardBrightness), Date().timeIntervalSince(keyboardChangedByUs) > 1 else { return }
+        notch.model.show(.keyboard(v), for: Prefs.double(K.hudDuration))
     }
 
     // MARK: teclas de volume e brilho
@@ -118,6 +146,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let v = (Brightness.level / step).rounded() * step + (key == .brightUp ? step : -step)
                 Brightness.level = max(0, min(1, v))
                 self.notch.model.show(.brightness(Brightness.level), for: duration)
+                return true
+            case .kbUp, .kbDown, .kbToggle:
+                guard Prefs.bool(K.enableKeyboardBrightness), KeyboardLight.available else { return false }
+                guard down else { return true }
+                let cur = KeyboardLight.level
+                var v: Float
+                if key == .kbToggle {
+                    if cur > 0 { self.lastKeyboardLevel = cur; v = 0 } else { v = self.lastKeyboardLevel }
+                } else {
+                    v = (cur / step).rounded() * step + (key == .kbUp ? step : -step)
+                }
+                KeyboardLight.level = max(0, min(1, v))
+                self.keyboardChangedByUs = Date()
+                self.keyboardLevel = KeyboardLight.level
+                self.notch.model.show(.keyboard(KeyboardLight.level), for: duration)
                 return true
             }
         }
@@ -217,7 +260,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             case "brightness": m.show(.brightness(0.75), for: forever)
             case "charging": m.show(.battery(Battery.read()?.level ?? 80, .charging), for: forever)
             case "low": m.show(.battery(12, .low), for: forever)
-            case "bt": m.show(.bluetooth("AirPods Pro", "airpodspro", 84), for: forever)
+            case "bt": m.show(.bluetooth("AirPods Pro", "airpodspro", 84, low: false), for: forever)
+            case "btlow": m.show(.bluetooth("AirPods Pro", "airpodspro", 12, low: true), for: forever)
+            case "keyboard": m.show(.keyboard(0.5), for: forever)
             case "lock": withAnimation { m.locked = true }
             case "track": m.show(.track, for: forever)
             default: break

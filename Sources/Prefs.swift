@@ -28,11 +28,15 @@ enum K {
     // Conectividade
     static let enableConnectivity = "enableConnectivity"
     static let showConnectivityBattery = "showConnectivityBattery"
+    static let warnOnLowConnectBattery = "warnOnLowConnectBattery"
+    static let playSoundOnLowConnectBattery = "playSoundOnLowConnectBattery"
+    static let lowConnectBatteryThreshold = "lowConnectBatteryThreshold"
     // HUDs
     static let enableVolume = "enableVolume"
     static let showVolumePercentage = "showVolumePercentage"
     static let enableBrightness = "enableBrightness"
     static let showBrightnessPercentage = "showBrightnessPercentage"
+    static let enableKeyboardBrightness = "enableKeyboardBrightness"
     static let hudProgressStyle = "hudProgressStyle"  // "white" | "accent"
     static let hudDuration = "hudDuration"
     // Tocando agora
@@ -63,6 +67,8 @@ enum Prefs {
             K.enableBattery: true, K.warnOnLowBattery: true, K.lowBatteryThreshold: 20,
             K.playSoundOnLowBattery: true, K.hideBatteryPercentage: false, K.notifyLowPowerMode: true,
             K.enableConnectivity: true, K.showConnectivityBattery: true,
+            K.warnOnLowConnectBattery: true, K.playSoundOnLowConnectBattery: true, K.lowConnectBatteryThreshold: 20,
+            K.enableKeyboardBrightness: true,
             K.enableVolume: true, K.showVolumePercentage: false,
             K.enableBrightness: true, K.showBrightnessPercentage: false,
             K.hudProgressStyle: "white", K.hudDuration: 1.6,

@@ -364,6 +364,11 @@ struct ConnectivityPage: View {
                 ToggleRow("Conectividade", K.enableConnectivity, info: "Mostra fones Bluetooth ao conectar")
                 ToggleRow("Mostrar bateria do aparelho", K.showConnectivityBattery, divider: false)
             }
+            Card(title: "Bateria dos fones") {
+                ToggleRow("Avisar com bateria fraca", K.warnOnLowConnectBattery)
+                SliderRow("Limite de bateria fraca", K.lowConnectBatteryThreshold, 5...50, step: 5, unit: "%")
+                ToggleRow("Tocar som com bateria fraca", K.playSoundOnLowConnectBattery, divider: false)
+            }
         }
     }
 }
@@ -373,6 +378,7 @@ struct DisplayPage: View {
         VStack(alignment: .leading, spacing: 4) {
             Card {
                 ToggleRow("HUD de brilho", K.enableBrightness, info: "Troca o aviso do sistema pelo do notch")
+                ToggleRow("HUD de brilho do teclado", K.enableKeyboardBrightness, info: "Teclas de luz e mudanças pela Central de Controle")
                 ToggleRow("Mostrar porcentagem", K.showBrightnessPercentage, divider: false)
             }
             Card(title: "HUDs") {

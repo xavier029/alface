@@ -76,7 +76,7 @@ enum Brightness {
 // Intercepta as teclas de volume/brilho (precisa de Acessibilidade) para trocar o HUD do sistema pelo do notch.
 final class MediaKeys {
     static let shared = MediaKeys()
-    enum Key { case volUp, volDown, mute, brightUp, brightDown }
+    enum Key { case volUp, volDown, mute, brightUp, brightDown, kbUp, kbDown, kbToggle }
     /// devolve true quando tratou a tecla (o evento some e o HUD do sistema não aparece)
     var handler: ((Key, NSEvent.ModifierFlags, _ down: Bool) -> Bool)?
     fileprivate var tap: CFMachPort?
@@ -106,6 +106,9 @@ final class MediaKeys {
             case 7: key = .mute
             case 2: key = .brightUp
             case 3: key = .brightDown
+            case 21: key = .kbUp
+            case 22: key = .kbDown
+            case 23: key = .kbToggle
             default: return false
             }
             return handler?(key, e.modifierFlags, down) ?? false
@@ -124,4 +127,56 @@ private func tapCallback(proxy: CGEventTapProxy, type: CGEventType, event: CGEve
         return Unmanaged.passUnretained(event)
     }
     return MediaKeys.shared.handle(type, event) ? nil : Unmanaged.passUnretained(event)
+}
+
+// Brilho do teclado pelo CoreBrightness (framework privado, classe KeyboardBrightnessClient).
+enum KeyboardLight {
+    static let client: NSObject? = {
+        dlopen("/System/Library/PrivateFrameworks/CoreBrightness.framework/CoreBrightness", RTLD_NOW)
+        return (NSClassFromString("KeyboardBrightnessClient") as? NSObject.Type)?.init()
+    }()
+    static let id: UInt64? = {
+        guard let c = client, c.responds(to: NSSelectorFromString("copyKeyboardBacklightIDs")) else { return nil }
+        return (c.perform(NSSelectorFromString("copyKeyboardBacklightIDs"))?.takeRetainedValue() as? [NSNumber])?.first?.uint64Value
+    }()
+    static var available: Bool { id != nil }
+    static var level: Float {
+        get {
+            guard let c = client, let id else { return 0 }
+            let sel = NSSelectorFromString("brightnessForKeyboard:")
+            guard c.responds(to: sel) else { return 0 }
+            return unsafeBitCast(c.method(for: sel), to: (@convention(c) (AnyObject, Selector, UInt64) -> Float).self)(c, sel, id)
+        }
+        set {
+            guard let c = client, let id else { return }
+            let sel = NSSelectorFromString("setBrightness:forKeyboard:")
+            guard c.responds(to: sel) else { return }
+            _ = unsafeBitCast(c.method(for: sel), to: (@convention(c) (AnyObject, Selector, Float, UInt64) -> Bool).self)(c, sel, max(0, min(1, newValue)), id)
+        }
+    }
+}
+
+// Avisa quando o volume ou o mudo mudam por qualquer caminho (Central de Controle, outro app...).
+final class VolumeWatch {
+    var onChange: (() -> Void)?
+    private var device = AudioDeviceID(0)
+    private lazy var listener: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.onChange?() }
+
+    func start() {
+        var a = AudioObjectPropertyAddress(mSelector: kAudioHardwarePropertyDefaultOutputDevice,
+                                           mScope: kAudioObjectPropertyScopeGlobal, mElement: kAudioObjectPropertyElementMain)
+        // trocou a saída (ex.: fones conectaram): passa a ouvir o novo dispositivo
+        AudioObjectAddPropertyListenerBlock(AudioObjectID(kAudioObjectSystemObject), &a, .main) { [weak self] _, _ in self?.bind() }
+        bind()
+    }
+
+    private func bind() {
+        if device != 0 {
+            AudioObjectRemovePropertyListenerBlock(device, &Volume.volumeAddr, .main, listener)
+            AudioObjectRemovePropertyListenerBlock(device, &Volume.muteAddr, .main, listener)
+        }
+        device = Volume.device()
+        AudioObjectAddPropertyListenerBlock(device, &Volume.volumeAddr, .main, listener)
+        AudioObjectAddPropertyListenerBlock(device, &Volume.muteAddr, .main, listener)
+    }
 }

@@ -64,10 +64,31 @@ final class Bluetooth: NSObject {
     var onEvent: ((Peek) -> Void)?
     private var note: IOBluetoothUserNotification?
     private var started = Date()
+    private var warned = Set<String>()
 
     func start() {
         started = Date()
         note = IOBluetoothDevice.register(forConnectNotifications: self, selector: #selector(connected(_:device:)))
+        // ponytail: bateria dos fones lida a cada minuto; o aviso chega com até 1 min de atraso
+        Timer.scheduledTimer(withTimeInterval: 60, repeats: true) { [weak self] _ in self?.checkBatteries() }
+    }
+
+    static var lowThreshold: Int { Prefs.d.integer(forKey: K.lowConnectBatteryThreshold) }
+
+    /// avisa uma vez quando um fone conectado cai abaixo do limite (rearma ao passar de limite+5)
+    func checkBatteries() {
+        guard Prefs.bool(K.enableConnectivity), Prefs.bool(K.warnOnLowConnectBattery) else { return }
+        for d in (IOBluetoothDevice.pairedDevices() as? [IOBluetoothDevice]) ?? [] where d.isConnected() {
+            guard let b = Self.battery(of: d), let addr = d.addressString else { continue }
+            if b <= Self.lowThreshold {
+                guard warned.insert(addr).inserted else { continue }
+                let name = d.name ?? "Fones"
+                onEvent?(.bluetooth(name, Self.symbol(for: name), b, low: true))
+                if Prefs.bool(K.playSoundOnLowConnectBattery) { NSSound(named: "Sosumi")?.play() }
+            } else if b > Self.lowThreshold + 5 {
+                warned.remove(addr)
+            }
+        }
     }
 
     @objc private func connected(_ n: IOBluetoothUserNotification, device: IOBluetoothDevice) {
@@ -79,7 +100,7 @@ final class Bluetooth: NSObject {
         // a bateria dos fones chega uns instantes depois da conexão
         DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
             let battery = Prefs.bool(K.showConnectivityBattery) ? Self.battery(of: device) : nil
-            self?.onEvent?(.bluetooth(name, Self.symbol(for: name), battery))
+            self?.onEvent?(.bluetooth(name, Self.symbol(for: name), battery, low: (battery ?? 100) <= Self.lowThreshold))
         }
     }
 

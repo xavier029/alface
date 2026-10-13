@@ -10,8 +10,9 @@ enum BatteryEvent: Equatable { case charging, low, lowPower }
 enum Peek: Equatable {
     case volume(Float, Bool)
     case brightness(Float)
+    case keyboard(Float)
     case battery(Int, BatteryEvent)
-    case bluetooth(String, String, Int?)
+    case bluetooth(String, String, Int?, low: Bool)
     case lock(Bool)
     case track
 }
@@ -65,7 +66,7 @@ final class NotchModel: ObservableObject {
         func wings(_ w: CGFloat, _ h: CGFloat? = nil) -> NotchLayout { .init(width: nw + 2 * w, height: h ?? nh, ear: 8, bottom: 13) }
         if let p = peek {
             switch p {
-            case .volume, .brightness: return wings(58)
+            case .volume, .brightness, .keyboard: return wings(58)
             case .battery: return wings(88)
             case .bluetooth: return wings(68)
             case .lock: return wings(36)
@@ -183,8 +184,9 @@ struct NotchRoot: View {
         switch p {
         case .volume: return "vol"
         case .brightness: return "bri"
+        case .keyboard: return "kbd"
         case .battery(_, let e): return "bat\(e)"
-        case .bluetooth(let n, _, _): return "bt\(n)"
+        case .bluetooth(let n, _, _, let low): return "bt\(n)\(low)"
         case .lock(let l): return "lock\(l)"
         case .track: return "track\(media.title)"
         }
@@ -339,6 +341,8 @@ struct PeekView: View {
                 value: muted ? 0 : Double(v), percent: volPct)
         case .brightness(let v):
             hud(symbol: v < 0.5 ? "sun.min.fill" : "sun.max.fill", value: Double(v), percent: briPct)
+        case .keyboard(let v):
+            hud(symbol: v == 0 ? "light.min" : "light.max", value: Double(v), percent: briPct)
         case .battery(let level, let e):
             let (label, color): (String, Color) = e == .charging ? ("Carregando", Self.green)
                 : e == .low ? ("Bateria fraca", Color(red: 1, green: 0.27, blue: 0.23)) : ("Pouca energia", Color(red: 1, green: 0.8, blue: 0.1))
@@ -354,16 +358,17 @@ struct PeekView: View {
                     BatteryGlyph(level: level, color: color)
                 }
             }
-        case .bluetooth(_, let symbol, let battery):
+        case .bluetooth(_, let symbol, let battery, let low):
+            let ring = low ? Color(red: 1, green: 0.27, blue: 0.23) : Self.green
             Wings(notchWidth: notchWidth, height: notchHeight) {
                 Image(systemName: symbol).font(.system(size: 15, weight: .medium)).foregroundStyle(.white)
             } right: {
                 if let b = battery {
                     HStack(spacing: 5) {
-                        Text("\(b)%").font(.system(size: 11, weight: .semibold)).monospacedDigit().foregroundStyle(.white)
+                        Text("\(b)%").font(.system(size: 11, weight: .semibold)).monospacedDigit().foregroundStyle(low ? ring : .white)
                         ZStack {
-                            Circle().stroke(Self.green.opacity(0.25), lineWidth: 2.5)
-                            Circle().trim(from: 0, to: CGFloat(b) / 100).stroke(Self.green, style: .init(lineWidth: 2.5, lineCap: .round)).rotationEffect(.degrees(-90))
+                            Circle().stroke(ring.opacity(0.25), lineWidth: 2.5)
+                            Circle().trim(from: 0, to: CGFloat(b) / 100).stroke(ring, style: .init(lineWidth: 2.5, lineCap: .round)).rotationEffect(.degrees(-90))
                         }
                         .frame(width: 15, height: 15)
                     }
