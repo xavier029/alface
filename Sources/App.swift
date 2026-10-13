@@ -78,7 +78,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         system.start()
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didActivateApplicationNotification, object: nil, queue: .main) { [weak self] n in
             let app = n.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication
-            withAnimation(NotchModel.spring) { self?.notch.model.sourceActive = app?.bundleIdentifier != nil && app?.bundleIdentifier == media.source?.bundle }
+            withAnimation(NotchModel.spring) { self?.notch.model.frontApp = app?.bundleIdentifier ?? "" }
         }
 
         if !isDemo { setupKeys() }

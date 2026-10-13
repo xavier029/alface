@@ -30,7 +30,7 @@ final class NotchModel: ObservableObject {
     @Published var notch = CGSize(width: 185, height: 32)
     @Published var locked = false
     @Published var hidden = false
-    @Published var sourceActive = false
+    @Published var frontApp = ""   // só para redesenhar quando o app da frente muda
     @Published var tick = Date()   // atualiza a atividade do calendário
     private var peekWork: DispatchWorkItem?
 
@@ -49,7 +49,8 @@ final class NotchModel: ObservableObject {
     var showsCompactMedia: Bool {
         let m = Media.shared
         return Prefs.bool(K.enableNowPlaying) && Prefs.string(K.idleActivity) == "playing"
-            && m.hasMedia && m.playing && !(Prefs.bool(K.hideWhileSourceActive) && sourceActive)
+            && m.hasMedia && m.playing
+            && !(Prefs.bool(K.hideWhileSourceActive) && NSWorkspace.shared.frontmostApplication?.bundleIdentifier == m.source?.bundle)
     }
 
     /// próximo evento que vale mostrar no notch (em andamento ou nos próximos 60 min)
@@ -768,7 +769,7 @@ final class NotchController {
     func scroll(_ e: NSEvent) {
         if e.phase == .began { scrollAcc = .zero; scrollFired = false }
         if e.phase == .ended || e.phase == .cancelled { scrollAcc = .zero; scrollFired = false; return }
-        guard !scrollFired, e.momentumPhase == [] else { return }
+        guard !scrollFired, e.momentumPhase == [], !model.locked else { return }
         scrollAcc.width += e.scrollingDeltaX
         scrollAcc.height += e.scrollingDeltaY
         let media = Media.shared
